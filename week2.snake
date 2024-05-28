@@ -1,0 +1,68 @@
+
+SAMPLES = ['P0rep1', 'P0rep2', 'P4rep1', 'P4rep2', 'P7rep1', 'P7rep2', 'ADrep1', 'ADrep2']
+
+rule all:
+	input:  
+		'results/GRCm39.primary_assembly.genome.fa.gz',
+		'results/gencode.vM33.primary_assembly.annotation.gtf',
+		expand('results/{sample}_flagstats.txt', sample=SAMPLES)
+
+rule get_m39:
+	output: 
+		'results/GRCm39.primary_assembly.genome.fa.gz'
+	params: 
+		outdir = 'results/'
+	shell:
+		'''
+		wget -P {params.outdir} https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M33/GRCm39.primary_assembly.genome.fa.gz 
+		'''
+
+rule get_m39_gtf:
+	output: 
+		'results/gencode.vM33.primary_assembly.annotation.gtf.gz'
+	params: 
+		outdir = 'results/'
+	shell:
+		'''
+		wget -P {params.outdir} https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M33/gencode.vM33.primary_assembly.annotation.gtf.gz
+		'''
+
+rule unzip:
+	input:
+		gz = 'results/gencode.vM33.primary_assembly.annotation.gtf.gz'
+	output:
+		gtf = 'results/gencode.vM33.primary_assembly.annotation.gtf'
+	shell:
+		'''
+		gunzip -c {input.gz} > {output.gtf}
+		'''
+
+
+rule star:
+	input: 
+		rd1 = 'samples/full_files/{sample}_R1.fastq.gz',
+		rd2 = 'samples/full_files/{sample}_R2.fastq.gz',
+		star_dir = 'results/m39_star/'
+
+	output:	
+		bam = 'results/{sample}.Aligned.out.bam'
+	params: 
+		extra = 'BAM Unsorted',
+		outdir = 'results/{sample}.'
+	threads: 8
+	shell:
+		'''
+		STAR --runThreadN {threads} --genomeDir {input.star_dir} --readFilesIn {input.rd1} {input.rd2} --outSAMtype {params.extra} --readFilesCommand zcat --outFileNamePrefix {params.outdir}
+		
+		'''
+
+rule samtools_flagstat:
+	input: 
+		bam = 'results/{sample}.Aligned.out.bam'
+	output:
+		outdir = 'results/{sample}_flagstats.txt'
+	shell:
+		'''
+		samtools flagstats {input.bam} > {output.outdir}
+
+		'''

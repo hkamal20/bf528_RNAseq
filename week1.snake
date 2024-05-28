@@ -1,0 +1,38 @@
+# variables to store list of file names
+SAMPLES = ['ADrep1', 'ADrep2', 'P0rep1', 'P0rep2', 'P4rep1', 'P4rep2', 'P7rep1', 'P7rep2']
+READ = ['R1', 'R2']
+
+
+# snakemake rule will produce the output from MultiQC 
+
+# output of the multiqc here
+rule all: 
+	input: 'results/multiqc_report.html'
+
+
+rule fastqc:
+	input:
+		fastq = 'samples/full_files/{name}_{read}.fastq.gz',
+	output:
+		fastqc = 'results/{name}_{read}_fastqc.html'
+	params:
+		outdir = 'results/'
+	shell:
+		'''
+		fastqc {input.fastq} -o {params.outdir}     
+		'''
+
+# want multiqc to run only after fastqc has run on all the files
+rule multiqc:
+	input: 
+		expand('results/{name}_{read}_fastqc.html', name=SAMPLES, read=READ) 
+
+	output: 
+		report = 'results/multiqc_report.html'
+
+	params:
+		outdir = 'results/'
+	shell:
+		'''
+		multiqc {params.outdir} -o {params.outdir} -f
+		'''

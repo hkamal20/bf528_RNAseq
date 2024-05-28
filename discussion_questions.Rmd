@@ -1,0 +1,276 @@
+# Project 1 - Discussion Questions
+Since we’ve used the first project as practice, these questions are meant to
+help me assess how well I’ve conveyed some of the material as well as challenge
+you to think conceptually about some of the underlying science. All of these
+questions can be answered in a few sentences so do your best to be concise.
+
+Remember, I will evaluate and give you feedback on your answers and allow you to
+resubmit. As long as you address all of the comments in your resubmission, you
+will receive full credit for this first project.
+
+Open a Rstudio session to work on these questions. You may display any included
+images by clicking on the `run current chunk` option for any r blocks that have
+an `include_graphics` command in knitr. 
+
+## Snakemake
+
+Consider the following sample snakemake workflow and assume the files A.fq,
+B.fq, and C.fq exist in the current working directory. (N.B. Some of these
+commands in shell may not technically run, but the logic of the snakefile is
+correct)
+
+```
+fa_fn = ‘ncbi_dataset/data/GCF_000001635.27/chr19.fa
+gtf_fn= ‘ncbi_dataset/data/GCF_000001635.27/genomic.gtf
+star_index = ‘Chr19_STAR_index’
+FILES = [‘A’, ‘B’, ‘C’]
+
+rule all:
+	input:
+		expand(‘{sample}.Aligned.out.bam’, sample=FILES)
+
+rule dl_genome:
+	output:
+		fa = fa_fn,
+		gtf = gtf_fn
+	shell:
+		‘’’
+		datasets download genome accession GCF_000001635.27 
+    –include gtf, genome
+    –chromosomes 19
+    
+		unzip ncbi_dataset.zip
+		‘’’
+
+rule STAR_index:
+	input:
+		fa = fa_fn,
+		gtf = gtf_fn,
+	output:
+		index=directory(star_index)
+	threads: 4
+	shell:
+		‘’’
+		STAR –runMode genome generate \
+		–genomeDir {output.index} \
+		–genomeFastaFiles {input.fa} \
+		–sjdbGTFfile {input.gtf}
+		‘’’
+		
+rule star:
+	input:
+		fq=’{sample}.fq’,
+		index=’Chr19_STAR_index’
+	output:
+		‘{sample}.Aligned.out.bam’
+	params:
+		prefix = ‘{sample}.’
+	shell:
+		‘’’
+		STAR –genomeDir {input.index} \
+    –readFilesIn {input.fq} \
+    –outSAMtype BAM Unsorted \
+    –outFileNamePrefix {params.prefix}
+    ‘’’
+```
+
+1. We’ve talked in class about how you can represent snakemake workflows visually.
+Technically speaking, snakemake creates a directed acyclic graph that represents
+the workflow. Draw the DAG for this sample snakemake workflow. Boxes indicate
+the rules, and arrows indicate dependencies. Make this diagram in whatever
+software you'd like and save it to this repo. Fill in the following code with the
+name of the file you created and it will display it here in this markdown.
+
+```{r, your image here}
+knitr::include_graphics("DAG1.png")
+```
+
+
+2. Write a valid snakemake rule that would run samtools sort on the outputs from
+rule star. Name the outputs of this rule with the extension _sorted.bam.
+
+
+rule samtools_sort:
+  input:
+    bam = '{filename}.Aligned.out.bam'
+  output:
+    sorted_bam = '{filename}_sorted.bam'
+  shell:
+    'samtools sort {input.bam} -o {output.sorted_bam}'
+
+
+
+3. Assume that we change our rule all input to be the following:
+	
+		expand(‘{samples}_sorted.bam’, samples=FILES)	
+
+Re-draw the DAG assuming your rule from part 2 works as expected. Display it 
+here using the following code:
+
+```{r, your image here}
+knitr::include_graphics("DAG2.png")
+```
+
+
+
+
+
+
+## RNAseq
+
+1. List the major high-level steps of a basic RNAseq experiment to look for
+differentially expressed genes. At each step, list what data you need to perform
+each step and what format they are in (if applicable). At minimum, there are 4
+essential steps.
+
+The first step of an RNAseq experiment is library construction where the RNA is isolated and converted into double stranded DNA. 
+Sequencing adapters are added and PCR is used to amplify the number of sequences. This is followed by quality control measures 
+to verify the library concentration and fragment lengths. The libraries are then sequenced using high-throughput sequencing platforms 
+using either single-end or paired-end sequencing depending on the design of the experiment which generates fastq files. After sequencing, quality control is 
+performed to assess sequence quality and trim adapters and low-quality sequences. FastQC can used for this step to identify bad or 
+outlier samples. After quality control, the processed reads are aligned against a reference genome using algorithms such as STAR to make bam files. 
+The alignments are compared to an annotation to quantify the number of reads that have desired features such as exons or coding 
+sequences. After quantification, a counts matrix is obtained which is a matrix of genes and sample counts. Before looking for 
+differentially expressed genes, genes that have zero reads are removed. Following this, statistical methods such as DESeq2 can 
+be performed which normalizes the data to correct for non-biological variation. After performing DESeq2 information such as 
+Log Fold Change and p-values can give us information of which genes were differentially expressed. 
+
+
+
+
+2. Consider the following FastQC plot.
+
+```{r}
+knitr::include_graphics("fastqc_plot.png")
+```
+
+
+2a. What aspect of the data does this plot show?
+
+This shows the GC content across the whole length of each sequence and compares it to a theoretical distribution measuring GC content. 
+
+
+
+2b. Make an interpretation of this plot assuming the data type was RNASeq.
+
+It appears that this plot may have some contamination due to the two peaks that differ from the theoretical distribution of GC content. Certain molecules could have been more amplified.
+
+
+
+2c. Do you think this plot indicates there was a problem with the dataset?
+Explain your answer.
+
+Yes, there was most likely some contamination because the reads should have the similar percent GC content to the GC content of the reference genome, and should follow the normal distribution. Multiple peaks indicates contamination, which could be due to high levels of rRNA which have high GC content.
+
+
+
+
+3. What is a splice-aware aligner? When is it important to use a splice-aware
+aligner?
+
+Splice aware aligners use knowledge of splice junctions and exon/intron structure to better map reads. This is important because when aligning mRNA to DNA, mRNA has introns already spliced out so it is important to use splice aligners to improve alignment. Some examples of splice aware programs are STAR and TopHat.
+
+
+4. What does a “gene-level” count as produced by VERSE or any other counting
+tool in a RNAseq experiment represent?
+
+A gene-level count represents the number of reads that map to a genomic feature such as an exon or a coding region. These counts make up the counts matrix and correlates to gene expression level. 
+
+
+5. In your own words, briefly describe what information the matching GTF for a
+reference genome stores.
+
+It contains the comprehensive gene annotation on the primary assembly (chromosomes and scaffolds) sequence regions.
+The annotation describes the precise location of the different elements in a genome, such as open reading frames (ORFs), 
+coding sequences (CDS), exons, introns, splice sites, regulatory motifs, start and stop codons, and promoters. 
+
+6. When counting alignments using VERSE or any other utility, why do we need to
+provide the matching reference genome GTF file?
+
+The GTF file contains the gene annotation and is used to assign the reads to specific genomic regions. This
+is needed so VERSE can count the alignments falling into regions of interest (exonic regions) in 
+the reference genome.
+
+
+
+7. Let’s pretend that this was a GSEA result from an experiment where we treated
+293T cells with a drug and compared changes in gene expression to wild-type
+cells treated with a vehicle control. The differential expression results are
+relative to the control cells (i.e. a positive fold change means a gene is
+upregulated upon treatment with the drug)
+
+Assume the following result is statistically significant with a positive NES
+(normalized enrichment score) and that it represents a GSEA experiment performed
+on the entire list of genes discovered in the experiment ranked by
+log2FoldChange (i.e. genes that are “upregulated” in the cells treated with drug
+are on the “left” and genes that are “downregulated” due to treatment are on the
+“right”).
+
+```{r}
+knitr::include_graphics("gsea_plot.png")
+```
+
+
+7a. Form a valid interpretation / conclusion of the results shown in the plot
+given the above setup.
+
+This plot shows the gene set enrichment for an inflammatory response pathway. The jagged line represents the walk-down algorithm which scans the ranked gene list. If the gene in the ranked list is in the gene set, an enrichment score is registered. The enrichment score will increase as more genes from the gene set are registered. When fewer genes in the gene set are registered the score will decrease. It appears that the enrichment score for this gene set is around 0.58, which is the maximum value shown on the graph. This score indicates gene set enrichment at the top of the ranked gene list. The genes in the gene set before the enrichment score make up the leading edge subset and contribute most to the enrichment score. With the genes being ranked based on log2FoldChange, this graph shows that the genes in the leading edge subset were high on the ranked list and therefore highly upregulated upon treatment with the drug. The graph also shows there is a strong correlation to phenotype, where the upregulated genes in cells treated with the drug are significant in the inflammation pathway.
+
+7b. Now consider that all of the genes driving the enrichment are all activators
+of the inflammatory pathway. Does your interpretation change and if so, how?
+
+No, this supports my interpretation. If the genes in cells treated with the drug driving enrichment are activators, it is consistent with these genes being high on the ranked list and highly up-regulated in the inflammation pathway.
+
+7c. Finally, consider that all of the genes driving the enrichment all function
+to inhibit inflammation. Does your interpretation change and if so, how?
+
+This would mean that genes driving enrichment in cells treated with the drug are up-regulated but not driving inflammation. If this is the case, then the drug is highly correlated with dampening the inflammatory pathway, but it does not change my interpretation that the genes are up-regulated. 
+
+
+## O’Meara et al. Transcriptional Reversion of Cardiac Myocyte Fate During
+Mammalian Cardiac Regeneration. Circ Res. Feb 2015. PMID: 25477501
+
+
+1. Write out a methods section describing what steps of the analysis you performed
+and which tools you used. Style this section as you would find a methods section
+in a scientific publication. Remember to include the important details that
+would allow a third party to reproduce your exact analysis. You can safely
+exclude details that do not affect the underlying results.
+
+RNA-Seq and data analysis.
+Data
+Data was derived from mRNAseq samples corresponding to the P0, P4, P7, and AD in vivo myocytes were downloaded from GEO accession (GSE64403). 
+
+Quality Control
+FastQC v0.12.0 and Multiqc v1.21 was performed with default parameters. 
+
+Alignment and Counting
+Reads were aligned to the gencode mouse primary assembly genome (GRCm39, release m33) using STAR v2.7.11b with default parameters. Post post-alignment quality control was done using Samtools v1.19 under the flagstat utility using default parameters. Gene counts were generated from alignments using VERSE v0.1.5 with default parameters [ref] and the gencode m34 primary assembly GTF.
+
+Filtering and Further Analysis
+Counts were combined to create a counts matrix which was then filtered to remove genes that did not have a non-zero count in all 8 samples. Normalization and differential expression analysis was performed with DESeq2 v1.42.1 using default parameters comparing the AD and P0 timepoints. Gene Set Enrichment Analysis was performed on genes ranked based on their Log2FoldChange value using fgsea v.4.3 from the Bioconductor package v.3.18.
+
+
+2. Why did the authors perform RNAseq on these specific samples? What was their
+goal in doing so?
+
+The authors performed RNA-seq on these samples to determine the transcriptional signature of cardiac myocyte differentiation. They analyzed mouse heart ventricles from postnatal days 0, 4, 7, and from 8-week-old adult mice. The goal of the researchers was to see if cardiac myocytes in mice revert to a less differentiated state at a transcriptional level during regeneration and to identify any specific genes or pathways involved in this process.
+
+
+
+3. Using either your GSEA results OR your replication of Figure 1D, draw a conclusion
+about the main result this RNAseq experiment shows. Do your results generally
+agree with those of the original publication?
+
+
+The findings indicated an increase in the expression of genes associated with sarcomere and mitochondrial functions, along with a decrease in the expression of cell cycle genes, as evidenced by the FPKM values of significantly differentially expressed genes. Sarcomere and mitochondrial differentially expressed genes were more highly expressed during in vivo differentiation. If cell cycle genes were not as strongly expressed, it supports the idea that cardiac myocytes were reverting to a less differentiated state. My results generally followed the pattern the graphs in the paper depicted.
+
+
+4. List at least two reasons why your results may be **slightly** different than
+those found in the original publication.
+
+One reason for the differences in my results could be attributed to how the counts matrix was generated during the VERSE steps, potentially resulting in miscounted alignments. Another factor could be the normalization method used by DESeq2 on the filtered counts data, which may have influenced the ranking of genes based on fold change and consequently impacted the results of Gene Set Enrichment Analysis.
+
+
+
+

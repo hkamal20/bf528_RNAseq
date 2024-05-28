@@ -1,0 +1,51 @@
+
+
+NAMES = ['ADrep1', 'ADrep2', 'P0rep1', 'P0rep2', 'P4rep1', 'P4rep2', 'P7rep1', 'P7rep2']
+
+rule all:
+	input: 'results/id2gene.txt', 'results/all_non_zero_verse_counts.csv'
+
+rule verse:
+    input:
+        bam = 'results/{sample}.Aligned.out.bam',
+        gtf = 'results/gencode.vM33.primary_assembly.annotation.gtf'
+
+    output:
+        verse_exons = 'results/{sample}.exon.txt'
+
+    params: prefix = 'results/{sample}'
+
+    shell:
+        '''
+        verse -S -a {input.gtf} -o {params.prefix} {input.bam}
+        '''
+rule concat_df:
+    input:
+        verse_file = expand('results/{name}.exon.txt', name=NAMES)
+    output: 
+        cts_matrix = 'results/all_verse_concat.csv'
+    shell:
+        '''
+        python concat_df.py -i {input.verse_file} -o {output.cts_matrix}
+        '''
+
+rule filter:
+    input:
+        verse_counts = 'results/all_verse_concat.csv'
+    output:
+        non_zero = 'results/all_non_zero_verse_counts.csv'
+
+    shell:
+        '''
+        python filter_cts_mat.py -i {input.verse_counts} -o {output.non_zero}
+        '''
+        
+rule mapped:
+    input:
+        gtf = 'results/gencode.vM33.primary_assembly.annotation.gtf'
+    output:
+        mapped = 'results/id2gene.txt'
+    shell:
+        '''
+        python parse_gtf.py -i {input.gtf} -o {output.mapped}
+        '''
